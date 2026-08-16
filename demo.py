@@ -1,4 +1,4 @@
-"""CPU demo: draft-verify, tree verify, feature head."""
+"""CPU demo: EAGLE-3 default, Leviathan chain, Medusa head."""
 
 from __future__ import annotations
 
@@ -6,30 +6,38 @@ import torch
 
 from spec_decode import (
     BigramLM,
-    FeatureDraftHead,
-    FeatureDraftModel,
+    Eagle3Draft,
+    MedusaDraftModel,
+    MedusaHead,
+    MultiLayerCausalLM,
     TinyCausalLM,
-    draft_tree,
+    eagle3_decode,
     greedy_decode,
-    speculative_decode,
-    tree_verify,
+    leviathan_decode,
 )
+
 
 if __name__ == "__main__":
     torch.manual_seed(0)
-    target = BigramLM(8)
-    draft = BigramLM(8)
-    prefix = torch.tensor([[0, 1]])
-    tgt = greedy_decode(target, prefix, n=6)
-    spec = speculative_decode(draft, target, prefix, gamma=4, temperature=0.0)
-    print("target greedy", tgt)
-    print("spec greedy  ", spec.tokens, "draft_accepted", spec.n_draft_accepted)
 
-    nodes = draft_tree(draft, prefix, branches=(2, 2), temperature=0.0)
-    path = tree_verify(target, prefix, nodes, temperature=0.0)
-    print("tree path    ", path, "nodes", len(nodes))
+    # Default: EAGLE-3 multi-layer fusion + tree verify
+    target = MultiLayerCausalLM(8, d_model=16, n_heads=4)
+    draft = Eagle3Draft(16, 8, n_heads=4)
+    prefix = torch.tensor([[0, 1, 2]])
+    path = eagle3_decode(target, draft, prefix, branches=(2, 2), temperature=0.0)
+    print("eagle3 path   ", path)
 
+    # Named variant: Leviathan chain draft-verify
+    tgt_bi = BigramLM(8)
+    dr_bi = BigramLM(8)
+    pref = torch.tensor([[0, 1]])
+    tgt = greedy_decode(tgt_bi, pref, n=6)
+    spec = leviathan_decode(dr_bi, tgt_bi, pref, gamma=4, temperature=0.0)
+    print("target greedy ", tgt)
+    print("leviathan     ", spec.tokens, "draft_accepted", spec.n_draft_accepted)
+
+    # Named variant: Medusa head + Leviathan verify
     lm = TinyCausalLM(8, d_model=16, n_heads=4)
-    head = FeatureDraftHead(16, 8)
-    fd = speculative_decode(FeatureDraftModel(lm, head), lm, prefix, gamma=3, temperature=0.0)
-    print("feature-head ", fd.tokens)
+    head = MedusaHead(16, 8, n_heads=2)
+    fd = leviathan_decode(MedusaDraftModel(lm, head), lm, pref, gamma=3, temperature=0.0)
+    print("medusa+leviat ", fd.tokens)

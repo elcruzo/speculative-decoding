@@ -1,29 +1,35 @@
 # Speculative decoding
 
-Lossless draft-then-verify (Leviathan et al.) plus a small tree-verify path and a Medusa-like feature draft head.
+**Default:** EAGLE-3 multi-layer hidden fusion + tree verify (Li et al. 2025).
+
+**Named variants:** Leviathan chain draft-verify; Medusa last-hidden heads.
 
 ## Papers
 
-- Leviathan, Kalman & Matias, *Fast Inference from Transformers via Speculative Decoding* (ICML 2023). Draft model proposes γ tokens; target verifies in **one** forward; accept until the first rejection; on reject, sample from the residual `(p − q)_+`. This is **lossless**: the output distribution equals target-only sampling.
-- Li et al., *EAGLE-3* (2025): the draft is not a second LM. A lightweight head reads **fused hidden features from multiple target layers** and predicts the next tokens. Training uses a feature-regression + draft-token loss. We **document** that design; the code implements the no-separate-model core: a linear `hidden → vocab` draft head (Medusa-shaped). Multi-layer fusion is the EAGLE-3 increment on top of that head.
+- Li et al., *EAGLE-3: Scaling up Inference Acceleration of Large Language Models via Training-Time Test* (2025) ([arXiv:2503.01840](https://arxiv.org/abs/2503.01840)). Abandons feature regression for **direct token prediction**. Fuses **low / mid / high** target hiddens: \(g=\mathrm{FC}(\mathrm{concat}(l,m,h))\). Draft mixes \(g\) (or self-predicted \(a\)) with the token embedding, runs **one decoder layer**, then an LM head. Compatible with EAGLE-2 **dynamic draft trees** and tree-attention verify.
+- Leviathan, Kalman & Matias, *Fast Inference from Transformers via Speculative Decoding* (ICML 2023). Draft proposes \(\gamma\) tokens; target verifies in one forward; accept until first rejection; on reject sample from \((p-q)_+\). **Lossless** vs target-only sampling.
+- Cai et al., *Medusa* (2024): parallel heads on the **last** hidden predict future tokens (no multi-layer fusion).
 
-## Classic algorithm (implemented)
+## Default algorithm (EAGLE-3)
 
-1. Draft samples `x_1..x_γ ~ q(· | prefix, x_<i)`.
-2. Target computes `p_i = p(· | prefix, x_<i)` for `i = 1..γ+1` in one forward.
-3. For each i: accept `x_i` with probability `min(1, p_i(x_i)/q_i(x_i))`.
-4. On first reject: sample `y ~ normalize((p_i − q_i)_+)` and stop.
-5. If all γ accepted: sample one bonus token from `p_{γ+1}`.
+1. Target forward on the prefix → layer features \(l,m,h\) → fused \(g=\mathrm{FC}(\mathrm{concat}(l,m,h))\).
+2. Draft tree: at each node, \(x=\mathrm{FC}(\mathrm{concat}(g\text{ or }a,\,e_{\mathrm{tok}}))\), \(a=\mathrm{Decoder}(x)\), sample top-\(k\) from \(\mathrm{LMHead}(a)\). Unverified positions reuse draft \(a\) in place of target \(g\).
+3. One target forward over \(\mathrm{concat}(\mathrm{prefix},\,\mathrm{node\ tokens})\) with a **tree attention mask**.
+4. Walk root→leaf; among siblings apply Leviathan accept with residual updated after **each** rejected sibling: \(p\leftarrow\mathrm{normalize}((p-q)_+)\).
 
-Greedy (`temperature=0`) is the same rule with one-hot `p, q`: accept while draft argmax equals target argmax; the residual is the target argmax.
+## Named variants
 
-## Tree verify
+| API | Role |
+|---|---|
+| `eagle3_decode` / `Eagle3Draft` | Default — fusion + tree |
+| `leviathan_decode` | Classic \(\gamma\)-chain draft-verify |
+| `MedusaHead` / `MedusaDraftModel` | Last-hidden parallel heads → Leviathan verify |
 
-Draft expands a top-2 then top-2 tree. The target sees `concat(prefix, node_tokens)` with a **tree attention mask** (each node attends to the prompt and its ancestors only). Acceptance walks from the root, applying the same residual rule among siblings, and returns one path.
+No silent fallback between these paths: wrong types raise `TypeError`.
 
 ## Papers on disk
 
-- [`papers/leviathan-speculative-decoding-2023.pdf`](papers/leviathan-speculative-decoding-2023.pdf) — Leviathan et al. Fast Inference via Speculative Decoding (2023) ([arXiv:2211.17192](https://arxiv.org/abs/2211.17192))
+- [`papers/leviathan-speculative-decoding-2023.pdf`](papers/leviathan-speculative-decoding-2023.pdf) — Leviathan et al. (2023) ([arXiv:2211.17192](https://arxiv.org/abs/2211.17192))
 - [`papers/li-eagle-2024.pdf`](papers/li-eagle-2024.pdf) — Li et al. EAGLE (2024) ([arXiv:2401.15077](https://arxiv.org/abs/2401.15077))
 - [`papers/li-eagle-3-2025.pdf`](papers/li-eagle-3-2025.pdf) — Li et al. EAGLE-3 (2025) ([arXiv:2503.01840](https://arxiv.org/abs/2503.01840))
 
