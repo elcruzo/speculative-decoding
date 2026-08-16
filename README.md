@@ -21,6 +21,12 @@ Greedy (`temperature=0`) is the same rule with one-hot `p, q`: accept while draf
 
 Draft expands a top-2 then top-2 tree. The target sees `concat(prefix, node_tokens)` with a **tree attention mask** (each node attends to the prompt and its ancestors only). Acceptance walks from the root, applying the same residual rule among siblings, and returns one path.
 
+## Papers on disk
+
+- [`papers/leviathan-speculative-decoding-2023.pdf`](papers/leviathan-speculative-decoding-2023.pdf) — Leviathan et al. Fast Inference via Speculative Decoding (2023) ([arXiv:2211.17192](https://arxiv.org/abs/2211.17192))
+- [`papers/li-eagle-2024.pdf`](papers/li-eagle-2024.pdf) — Li et al. EAGLE (2024) ([arXiv:2401.15077](https://arxiv.org/abs/2401.15077))
+- [`papers/li-eagle-3-2025.pdf`](papers/li-eagle-3-2025.pdf) — Li et al. EAGLE-3 (2025) ([arXiv:2503.01840](https://arxiv.org/abs/2503.01840))
+
 ## Run
 
 ```bash
