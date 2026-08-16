@@ -32,6 +32,7 @@ No silent fallback between these paths: wrong types raise `TypeError`.
 - [`papers/leviathan-speculative-decoding-2023.pdf`](papers/leviathan-speculative-decoding-2023.pdf) — Leviathan et al. (2023) ([arXiv:2211.17192](https://arxiv.org/abs/2211.17192))
 - [`papers/li-eagle-2024.pdf`](papers/li-eagle-2024.pdf) — Li et al. EAGLE (2024) ([arXiv:2401.15077](https://arxiv.org/abs/2401.15077))
 - [`papers/li-eagle-3-2025.pdf`](papers/li-eagle-3-2025.pdf) — Li et al. EAGLE-3 (2025) ([arXiv:2503.01840](https://arxiv.org/abs/2503.01840))
+- [`papers/cai-medusa-2024.pdf`](papers/cai-medusa-2024.pdf) — Cai et al. Medusa (2024) ([arXiv:2401.10774](https://arxiv.org/abs/2401.10774))
 
 ## Run
 

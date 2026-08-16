@@ -14,6 +14,7 @@ from spec_decode import (
     MedusaHead,
     MultiLayerCausalLM,
     TinyCausalLM,
+    TreeNode,
     draft_tree,
     eagle3_decode,
     eagle3_draft_tree,
@@ -21,6 +22,7 @@ from spec_decode import (
     leviathan_decode,
     medusa_draft_logits,
     residual_after_reject,
+    tree_attention_mask,
     tree_verify,
 )
 
@@ -68,10 +70,11 @@ def test_leviathan_rejection_sampling_lossless_tv():
 
 
 def test_tree_verify_accepts_valid_path():
+    """Tree verify must use a mask-aware target (not BigramLM, which ignores attn_mask)."""
     torch.manual_seed(2)
     v = 8
-    draft = BigramLM(v)
-    target = BigramLM(v)
+    draft = TinyCausalLM(v, d_model=16, n_heads=4)
+    target = TinyCausalLM(v, d_model=16, n_heads=4)
     prefix = torch.tensor([[0, 1]])
     nodes = draft_tree(draft, prefix, branches=(2, 2), temperature=0.0)
     assert len(nodes) == 2 + 4
@@ -90,9 +93,34 @@ def test_tree_verify_accepts_valid_path():
             break
         cur_ids = child_of[match[0]]
 
+    # Mask must be live: corrupting tree ancestry changes logits.
+    prefix_len = prefix.shape[1]
+    tokens = torch.cat([prefix, torch.tensor([[n.token for n in nodes]])], dim=1)
+    good_mask = tree_attention_mask(prefix_len, nodes)
+    bad_mask = good_mask.clone()
+    depth1 = [i for i, n in enumerate(nodes) if n.parent >= 0]
+    assert depth1, "need non-root nodes to corrupt ancestry"
+    victim = depth1[0]
+    parent = nodes[victim].parent
+    # Allow attending to a non-ancestor (tree mask forbids this).
+    forbidden = [
+        j
+        for j in range(len(nodes))
+        if j != victim
+        and j != parent
+        and not good_mask[prefix_len + victim, prefix_len + j].item()
+    ]
+    assert forbidden, "need a False mask entry to flip"
+    bad_mask[prefix_len + victim, prefix_len + forbidden[0]] = True
+    logits_good = target(tokens, attn_mask=good_mask)
+    logits_bad = target(tokens, attn_mask=bad_mask)
+    assert not torch.allclose(logits_good, logits_bad), "attn_mask ignored — Bigram-style stub"
 
-def test_residual_updated_per_rejected_sibling():
-    """AGENTS pitfall: p ← (p−q)_+ after **each** reject, not one residual at the end."""
+
+def test_residual_updated_per_rejected_sibling(monkeypatch):
+    """AGENTS pitfall: p ← (p−q)_+ after **each** reject inside tree_verify, not one residual at the end."""
+    import spec_decode as sd
+
     p0 = torch.tensor([0.40, 0.30, 0.20, 0.10])
     q_a = torch.tensor([0.50, 0.20, 0.20, 0.10])
     q_b = torch.tensor([0.10, 0.60, 0.20, 0.10])
@@ -103,6 +131,60 @@ def test_residual_updated_per_rejected_sibling():
     assert torch.allclose(p2, torch.tensor([0.0, 1.0, 0.0, 0.0]), atol=1e-5)
     one_shot = residual_after_reject(p0, q_a + q_b)
     assert not torch.allclose(one_shot, p2, atol=1e-5)
+
+    # Force multi-sibling rejects inside tree_verify and assert sequential residual calls.
+    calls: list[tuple[torch.Tensor, torch.Tensor]] = []
+    real_residual = sd.residual_after_reject
+
+    def tracked_residual(p: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
+        calls.append((p.detach().clone(), q.detach().clone()))
+        return real_residual(p, q)
+
+    monkeypatch.setattr(sd, "residual_after_reject", tracked_residual)
+
+    # Always draw u≈1 so accept ratio never succeeds (exercises residual path).
+    def always_high_rand(*_args, **_kwargs):
+        return torch.tensor(0.999)
+
+    monkeypatch.setattr(torch, "rand", always_high_rand)
+
+    class FixedLogitsLM(torch.nn.Module):
+        """Softmax row at the prefix parent equals p0 so residual math is controlled."""
+
+        def __init__(self, logits_row: torch.Tensor):
+            super().__init__()
+            self.logits_row = logits_row
+
+        def forward(self, tokens: torch.Tensor, attn_mask: torch.Tensor | None = None) -> torch.Tensor:
+            b, t = tokens.shape
+            v = self.logits_row.numel()
+            out = torch.full((b, t, v), -10.0)
+            out[:, 0, :] = self.logits_row
+            return out
+
+    # Draft q peaked on wrong tokens → p[x]/q[x] ≪ 1 → both siblings reject under u=0.999.
+    q_wrong_a = torch.tensor([0.05, 0.80, 0.10, 0.05])  # token 1
+    q_wrong_b = torch.tensor([0.05, 0.10, 0.80, 0.05])  # token 2
+    logits = torch.log(p0)
+    target = FixedLogitsLM(logits)
+    prefix = torch.tensor([[0]])
+    # Higher q[x] first in sort: try token 1 then token 2.
+    nodes = [
+        TreeNode(token=1, parent=-1, q_prob=q_wrong_a.clone()),
+        TreeNode(token=2, parent=-1, q_prob=q_wrong_b.clone()),
+    ]
+    path = tree_verify(target, prefix, nodes, temperature=1.0)
+    assert len(calls) == 2, f"expected per-sibling residual, got {len(calls)} calls"
+    assert torch.allclose(calls[0][0], p0, atol=1e-4)
+    assert torch.allclose(calls[0][1], q_wrong_a, atol=1e-5)
+    assert torch.allclose(calls[1][0], real_residual(p0, q_wrong_a), atol=1e-4)
+    assert torch.allclose(calls[1][1], q_wrong_b, atol=1e-5)
+    sequential = real_residual(real_residual(p0, q_wrong_a), q_wrong_b)
+    one_shot_tree = real_residual(p0, q_wrong_a + q_wrong_b)
+    assert not torch.allclose(one_shot_tree, sequential, atol=1e-5), (
+        "one-shot residual at end of sibling walk must differ from sequential (p−q)_+"
+    )
+    assert path[-1] == int(sequential.argmax().item())
 
 
 def test_mean_accepted_gt_one_when_draft_matches_target():
