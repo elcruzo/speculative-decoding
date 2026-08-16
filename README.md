@@ -37,6 +37,6 @@ No silent fallback between these paths: wrong types raise `TypeError`.
 ## Run
 
 ```bash
-python demo.py
+python main.py
 python -m pytest test_spec_decode.py -q
 ```
