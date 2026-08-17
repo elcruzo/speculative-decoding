@@ -6,23 +6,23 @@
 
 ## Papers
 
-- Li et al., *EAGLE-3: Scaling up Inference Acceleration of Large Language Models via Training-Time Test* (2025) ([arXiv:2503.01840](https://arxiv.org/abs/2503.01840)). Abandons feature regression for **direct token prediction**. Fuses **low / mid / high** target hiddens: \(g=\mathrm{FC}(\mathrm{concat}(l,m,h))\). Draft mixes \(g\) (or self-predicted \(a\)) with the token embedding, runs **one decoder layer**, then an LM head. Compatible with EAGLE-2 **dynamic draft trees** and tree-attention verify.
-- Leviathan, Kalman & Matias, *Fast Inference from Transformers via Speculative Decoding* (ICML 2023). Draft proposes \(\gamma\) tokens; target verifies in one forward; accept until first rejection; on reject sample from \((p-q)_+\). **Lossless** vs target-only sampling.
+- Li et al., *EAGLE-3: Scaling up Inference Acceleration of Large Language Models via Training-Time Test* (2025) ([arXiv:2503.01840](https://arxiv.org/abs/2503.01840)). Abandons feature regression for **direct token prediction**. Fuses **low / mid / high** target hiddens: $g=\mathrm{FC}(\mathrm{concat}(l,m,h))$. Draft mixes $g$ (or self-predicted $a$) with the token embedding, runs **one decoder layer**, then an LM head. Compatible with EAGLE-2 **dynamic draft trees** and tree-attention verify.
+- Leviathan, Kalman & Matias, *Fast Inference from Transformers via Speculative Decoding* (ICML 2023). Draft proposes $\gamma$ tokens; target verifies in one forward; accept until first rejection; on reject sample from $(p-q)_+$. **Lossless** vs target-only sampling.
 - Cai et al., *Medusa* (2024): parallel heads on the **last** hidden predict future tokens (no multi-layer fusion).
 
 ## Default algorithm (EAGLE-3)
 
-1. Target forward on the prefix → layer features \(l,m,h\) → fused \(g=\mathrm{FC}(\mathrm{concat}(l,m,h))\).
-2. Draft tree: at each node, \(x=\mathrm{FC}(\mathrm{concat}(g\text{ or }a,\,e_{\mathrm{tok}}))\), \(a=\mathrm{Decoder}(x)\), sample top-\(k\) from \(\mathrm{LMHead}(a)\). Unverified positions reuse draft \(a\) in place of target \(g\).
-3. One target forward over \(\mathrm{concat}(\mathrm{prefix},\,\mathrm{node\ tokens})\) with a **tree attention mask**.
-4. Walk root→leaf; among siblings apply Leviathan accept with residual updated after **each** rejected sibling: \(p\leftarrow\mathrm{normalize}((p-q)_+)\).
+1. Target forward on the prefix → layer features $l,m,h$ → fused $g=\mathrm{FC}(\mathrm{concat}(l,m,h))$.
+2. Draft tree: at each node, $x=\mathrm{FC}(\mathrm{concat}(g\text{ or }a,\,e_{\mathrm{tok}}))$, $a=\mathrm{Decoder}(x)$, sample top-$k$ from $\mathrm{LMHead}(a)$. Unverified positions reuse draft $a$ in place of target $g$.
+3. One target forward over $\mathrm{concat}(\mathrm{prefix},\,\mathrm{node\ tokens})$ with a **tree attention mask**.
+4. Walk root→leaf; among siblings apply Leviathan accept with residual updated after **each** rejected sibling: $p\leftarrow\mathrm{normalize}((p-q)_+)$.
 
 ## Named variants
 
 | API | Role |
 |---|---|
 | `eagle3_decode` / `Eagle3Draft` | Default — fusion + tree |
-| `leviathan_decode` | Classic \(\gamma\)-chain draft-verify |
+| `leviathan_decode` | Classic $\gamma$-chain draft-verify |
 | `MedusaHead` / `MedusaDraftModel` | Last-hidden parallel heads → Leviathan verify |
 
 No silent fallback between these paths: wrong types raise `TypeError`.
