@@ -34,6 +34,31 @@ No silent fallback between these paths: wrong types raise `TypeError`.
 - [`papers/li-eagle-3-2025.pdf`](papers/li-eagle-3-2025.pdf) — Li et al. EAGLE-3 (2025) ([arXiv:2503.01840](https://arxiv.org/abs/2503.01840))
 - [`papers/cai-medusa-2024.pdf`](papers/cai-medusa-2024.pdf) — Cai et al. Medusa (2024) ([arXiv:2401.10774](https://arxiv.org/abs/2401.10774))
 
+## Compared to EAGLE-3 / Leviathan
+
+**What you learn here:**
+- EAGLE-3 multi-layer hidden fusion $g=\mathrm{FC}(\mathrm{concat}(l,m,h))$ + tree verify
+- Leviathan accept/reject with residual $p\leftarrow(p-q)_+$ after each rejected sibling
+- Named Medusa last-hidden heads — no silent path switch
+
+| | This repo | EAGLE-3 (Li et al. 2025) |
+|---|---|---|
+| Target | Tiny MultiLayerCausalLM (d=16) | LLaMA / DeepSeek-scale |
+| Draft | `Eagle3Draft` one decoder layer | Trained draft on ShareGPT/UltraChat |
+| Verify | Tree mask + Leviathan walk | Same accept math; CUDA/SGLang stack |
+
+### Numbers (2026-08-16, Darwin 25.5.0 arm64 / Apple M5)
+
+| Metric | This repo | Baseline | Source |
+|---|---|---|---|
+| EAGLE-3 accepted path | `[0]` (toy untrained) | τ ≈ 4.0–7.5 | arXiv:2503.01840; `main.py` |
+| Leviathan `draft_accepted` | 0 (BigramLM γ=4) | speedup up to 6.5× | same paper; `main.py` |
+| Target greedy length | 6 tokens | — | `main.py` |
+
+```bash
+python main.py
+```
+
 ## Run
 
 ```bash
