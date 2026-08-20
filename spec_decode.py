@@ -251,7 +251,7 @@ def residual_after_reject(p: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
     r = (p - q).clamp(min=0)
     z = r.sum()
     if float(z) <= 0:
-        # Zero residual mass: paper normalise is undefined; recover with target p (named, not silent).
+        # Zero residual mass: paper normalise is undefined; recover with target p.
         return p / p.sum().clamp(min=1e-12)
     return r / z
 
