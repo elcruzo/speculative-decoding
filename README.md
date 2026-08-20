@@ -25,7 +25,7 @@
 | `leviathan_decode` | Classic $\gamma$-chain draft-verify |
 | `MedusaHead` / `MedusaDraftModel` | Last-hidden parallel heads → Leviathan verify |
 
-No silent fallback between these paths: wrong types raise `TypeError`.
+Wrong types raise `TypeError`.
 
 ## Papers on disk
 
@@ -39,12 +39,12 @@ No silent fallback between these paths: wrong types raise `TypeError`.
 **What you learn here:**
 - EAGLE-3 multi-layer hidden fusion $g=\mathrm{FC}(\mathrm{concat}(l,m,h))$ + tree verify
 - Leviathan accept/reject with residual $p\leftarrow(p-q)_+$ after each rejected sibling
-- Named Medusa last-hidden heads — no silent path switch
+- Named Medusa last-hidden heads; wrong types raise `TypeError`
 
 | | This repo | EAGLE-3 (Li et al. 2025) |
 |---|---|---|
 | Target | Tiny MultiLayerCausalLM (d=16) | LLaMA / DeepSeek-scale |
-| Draft | `Eagle3Draft` one decoder layer | Trained draft on ShareGPT/UltraChat |
+| Draft | `Eagle3Draft` at random init | Trained draft on ShareGPT/UltraChat |
 | Verify | Tree mask + Leviathan walk | Same accept math; CUDA/SGLang stack |
 
 ### Numbers (2026-08-16, Darwin 25.5.0 arm64 / Apple M5)

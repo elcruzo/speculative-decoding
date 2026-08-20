@@ -7,7 +7,7 @@ Default (EAGLE-3, Li et al. 2025 arXiv:2503.01840):
   attention; accept a root-to-leaf path with Leviathan residual (p−q)_+ updated
   after **each** rejected sibling.
 
-Named variants (explicit, no silent fallback):
+Named variants (wrong draft type raises ``TypeError``):
   - ``leviathan_decode`` — classic chain draft-then-verify (Leviathan 2023).
   - ``MedusaHead`` — parallel linear heads on the **last** hidden only (Cai et al.).
 """
@@ -158,6 +158,9 @@ class Eagle3Draft(nn.Module):
       g = FC(concat(l, m, h))                         # 3k → k
       x = FC(concat(g_or_a, e_token))                  # 2k → k
       a = DecoderLayer(x);  logits = LMHead(a)         # direct token prediction
+
+    Weights start at PyTorch default init (untrained). Demos exercise fusion + tree
+    verify on that random draft.
     """
 
     def __init__(self, d_model: int, vocab_size: int, n_heads: int = 4):
